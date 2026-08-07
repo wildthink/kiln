@@ -462,6 +462,7 @@ public struct SiteGenerator {
             pageTitle: title,
             contentHTML: rendered.html,
             tableOfContents: rendered.tableOfContents,
+            markdownHead: rendered.head,
             frontMatter: page.frontMatter,
             pageURL: urlPath,
             canonicalURL: canonical,
@@ -544,6 +545,7 @@ public struct SiteGenerator {
             socialImage: String?,
             isHome: Bool,
             contentHTML: String = "",
+            markdownHead: MarkdownHead = MarkdownHead(),
             blogPost: LeafData? = nil,
             blogListing: LeafData? = nil,
             article: ArticleStructuredData? = nil,
@@ -566,6 +568,7 @@ public struct SiteGenerator {
                 pageTitle: title,
                 contentHTML: contentHTML,
                 tableOfContents: [],
+                markdownHead: markdownHead,
                 // Blog pages own their full-width layout — hide the doc nav/TOC rails.
                 frontMatter: FrontMatter(values: ["sidebar": "false", "toc": "false"]),
                 pageURL: urlPath,
@@ -621,6 +624,7 @@ public struct SiteGenerator {
                 socialImage: socialImage,
                 isHome: false,
                 contentHTML: post.contentHTML,
+                markdownHead: post.markdownHead,
                 blogPost: BlogLeafData.post(post, urls: urls, blog: blog),
                 article: article,
                 // Home (the blog index) › this post — for a BreadcrumbList.

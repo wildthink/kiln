@@ -99,6 +99,105 @@ struct MarkdownTests {
         """)
         #expect(result.html.contains("<code class=\"language-swift\">"))
     }
+
+    @Test("Inline attributes are opt-in and render a normalized class")
+    func inlineAttributes() {
+        let source = #"^[formatted text](class: "badge   badge-warning")"#
+        #expect(renderer.render(source).html == "<p>formatted text</p>\n")
+
+        let attributed = MarkdownRenderer(options: MarkdownExtensions(inlineAttributes: true))
+            .render(source)
+        #expect(attributed.html == "<p><span class=\"badge badge-warning\">formatted text</span></p>\n")
+    }
+
+    @Test("Malformed inline attributes cannot inject HTML attributes")
+    func malformedInlineAttributes() {
+        let attributed = MarkdownRenderer(options: MarkdownExtensions(inlineAttributes: true))
+            .render(#"^[safe text](class: "\"><script>")"#)
+        #expect(!attributed.html.contains("<script>"))
+        #expect(attributed.html.contains("class=\"&quot;&gt;&lt;script&gt;\""))
+    }
+
+    @Test("Block directive handlers render children and collect page head elements")
+    func blockDirectiveHandler() {
+        let head = MarkdownHead(
+            metadata: [.init(value: "kiln-component", content: "card")],
+            stylesheets: [.init("/components/card.css")],
+            scripts: [.init("/components/card.js")]
+        )
+        let handler = MarkdownDirectiveHandler("Card") { directive in
+            .container(
+                .aside,
+                bodyHTML: directive.bodyHTML,
+                classes: ["card", directive.arguments["tone"] ?? ""],
+                head: head
+            )
+        }
+        let renderer = MarkdownRenderer(options: MarkdownExtensions(directiveHandlers: [handler]))
+        let result = renderer.render("""
+        @Card(tone: warning) {
+          ## Details
+
+          Read the [guide](guide.md).
+
+          ![Diagram](diagram.png)
+        }
+        """)
+
+        #expect(result.html.contains("<aside class=\"card warning\">"))
+        #expect(result.html.contains("<h2 id=\"details\">"))
+        #expect(result.links == ["guide.md"])
+        #expect(result.images == ["diagram.png"])
+        #expect(result.tableOfContents.map(\.id) == ["details"])
+        #expect(result.metaDescription == "Read the guide.")
+        #expect(result.head == head)
+        #expect(result.head.html.contains(#"<meta name="kiln-component" content="card">"#))
+        #expect(result.head.html.contains(#"<link rel="stylesheet" href="/components/card.css">"#))
+        #expect(result.head.html.contains(#"<script src="/components/card.js" defer></script>"#))
+    }
+
+    @Test("Unknown directives preserve children when directive parsing is enabled")
+    func unknownDirective() {
+        let known = MarkdownDirectiveHandler("Known") { directive in
+            .init(html: directive.bodyHTML)
+        }
+        let renderer = MarkdownRenderer(options: MarkdownExtensions(directiveHandlers: [known]))
+        let result = renderer.render("""
+        @Unknown {
+          Body survives.
+        }
+        """)
+        #expect(result.html == "<p>Body survives.</p>\n")
+    }
+
+    @Test("Repeated directives deduplicate identical page head elements")
+    func directiveHeadDeduplication() {
+        let stylesheet = MarkdownStylesheet("/components/card.css")
+        let handler = MarkdownDirectiveHandler("Card") { directive in
+            .init(html: directive.bodyHTML, head: MarkdownHead(stylesheets: [stylesheet]))
+        }
+        let renderer = MarkdownRenderer(options: MarkdownExtensions(directiveHandlers: [handler]))
+        let result = renderer.render("""
+        @Card { One }
+
+        @Card { Two }
+        """)
+        #expect(result.head.stylesheets == [stylesheet])
+    }
+
+    @Test("Page head values are HTML attribute escaped")
+    func directiveHeadEscaping() {
+        let head = MarkdownHead(
+            metadata: [.init(value: #"x" onload="bad"#, content: "<&")],
+            stylesheets: [.init(#"/styles/"bad.css"#)],
+            scripts: [.init(#"/scripts/"bad.js"#)]
+        )
+        #expect(head.html.contains(#"name="x&quot; onload=&quot;bad""#))
+        #expect(head.html.contains(#"content="&lt;&amp;""#))
+        #expect(head.html.contains(#"href="/styles/&quot;bad.css""#))
+        #expect(head.html.contains(#"src="/scripts/&quot;bad.js""#))
+        #expect(!head.html.contains(" onload=\"bad\""))
+    }
 }
 
 @Suite("Slugger")

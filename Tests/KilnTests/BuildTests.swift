@@ -82,6 +82,53 @@ struct BuildTests {
         #expect(germanHome.contains("Abschnitt"))
     }
 
+    @Test("Directive head resources reach generated page HTML")
+    func directiveHeadResources() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kiln-directive-test-\(UUID().uuidString)")
+        let content = root.appendingPathComponent("Content")
+        let output = root.appendingPathComponent("Output")
+        try FileManager.default.createDirectory(at: content, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try """
+        # Home
+
+        @Widget {
+          Rendered body.
+        }
+        """.write(to: content.appendingPathComponent("index.md"), atomically: true, encoding: .utf8)
+
+        let widget = MarkdownDirectiveHandler("Widget") { directive in
+            .container(
+                .section,
+                bodyHTML: directive.bodyHTML,
+                classes: ["widget"],
+                head: MarkdownHead(
+                    metadata: [.init(value: "component", content: "widget")],
+                    stylesheets: [.init("/widget.css")],
+                    scripts: [.init("/widget.js")]
+                )
+            )
+        }
+        let site = KilnSite(
+            name: "Directive Test",
+            url: "https://example.com",
+            markdown: MarkdownExtensions(directiveHandlers: [widget]),
+            llmsText: false
+        ) {
+            Page("Home", "index.md")
+        }
+
+        try await Kiln.build(site, contentDirectory: content, outputDirectory: output, linkChecking: .off)
+        let html = try read(output.appendingPathComponent("index.html"))
+        #expect(html.contains(#"<meta name="component" content="widget">"#))
+        #expect(html.contains(#"<link rel="stylesheet" href="/widget.css">"#))
+        #expect(html.contains(#"<script src="/widget.js" defer></script>"#))
+        #expect(html.contains(#"<section class="widget">"#))
+        #expect(html.contains("Rendered body."))
+    }
+
     @Test("Missing translations fall back to the default language with a banner")
     func fallback() async throws {
         let output = try await buildFixture()

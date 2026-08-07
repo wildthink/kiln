@@ -97,6 +97,8 @@ struct RenderContext {
     var pageTitle: String
     var contentHTML: String
     var tableOfContents: [TOCEntry]
+    /// Per-page `<head>` elements requested by Markdown rendering hooks.
+    var markdownHead: MarkdownHead = MarkdownHead()
     var frontMatter: FrontMatter
     var pageURL: String
     /// Absolute canonical URL of this page (for `<link rel=canonical>` and `og:url`).
@@ -395,12 +397,14 @@ struct RenderContext {
         // (and the docs site) unchanged.
         let showSidebar = frontMatter.values["sidebar"] != "false"
         let showTOC = frontMatter.values["toc"] != "false"
+        let markdownHeadHTML = markdownHead.html
         return .dictionary([
             "title": .string(pageTitle),
             // Character count of the title, so templates can SERP-aware trim a
             // brand suffix on already-long titles (e.g. `#if(page.titleLength > 50)`).
             "titleLength": .int(pageTitle.count),
             "content": .string(contentHTML),
+            "markdownHead": markdownHeadHTML.isEmpty ? .trueNil : .string(markdownHeadHTML),
             "toc": .array(toc),
             "hasTOC": .bool(!toc.isEmpty),
             "showSidebar": .bool(showSidebar),

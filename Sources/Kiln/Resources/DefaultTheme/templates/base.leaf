@@ -67,6 +67,7 @@
         })();
     </script>
     #if(page.structuredData):<script type="application/ld+json">#unsafeHTML(page.structuredData)</script>#endif
+    #if(page.markdownHead):#unsafeHTML(page.markdownHead)#endif
 </head>
 <body>
     <a class="kiln-skip-link" href="#kiln-main">#(strings.skipToContent)</a>

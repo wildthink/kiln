@@ -30,25 +30,36 @@ enum HTMLEscaping {
 /// optional permalink anchors to headings while collecting them for the table
 /// of contents.
 struct HTMLRenderer: MarkupWalker {
-    private(set) var result = ""
+    var result = ""
     private(set) var headings: [TOCEntry] = []
     /// Raw `<a>` destinations encountered (before link rewriting), for link checking.
     private(set) var links: [String] = []
     /// Raw `<img>` sources encountered (before rewriting), for link checking.
     private(set) var images: [String] = []
+    var head = MarkdownHead()
 
     private let slugger: Slugger
     private let toc: TableOfContentsOptions
     private let linkResolver: LinkResolver?
+    let rendersInlineAttributes: Bool
+    let directiveHandlers: [MarkdownDirectiveHandler]
 
     private var inTableHead = false
     private var tableColumnAlignments: [Table.ColumnAlignment?]? = nil
     private var currentTableColumn = 0
 
-    init(slugger: Slugger, tocOptions: TableOfContentsOptions, linkResolver: LinkResolver? = nil) {
+    init(
+        slugger: Slugger,
+        tocOptions: TableOfContentsOptions,
+        linkResolver: LinkResolver? = nil,
+        rendersInlineAttributes: Bool = false,
+        directiveHandlers: [MarkdownDirectiveHandler] = []
+    ) {
         self.slugger = slugger
         self.toc = tocOptions
         self.linkResolver = linkResolver
+        self.rendersInlineAttributes = rendersInlineAttributes
+        self.directiveHandlers = directiveHandlers
     }
 
     /// Rewrite a relative link/asset destination via the resolver, if present.

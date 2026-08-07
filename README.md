@@ -356,6 +356,12 @@ Supported out of the box:
   ---
   ```
 
+- **Inline attributes and block directives** — opt-in swift-markdown syntax for
+  styled inline spans and code-defined components. Directive handlers can wrap
+  rendered Markdown and request per-page metadata, stylesheets, and scripts;
+  Kiln escapes and deduplicates head resources. See the example site's
+  [Markdown guide](Examples/ExampleSite/Content/latest/guides/markdown.md).
+
 ## Configuration reference
 
 `KilnSite` is the single source of truth:

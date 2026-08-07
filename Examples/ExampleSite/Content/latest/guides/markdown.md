@@ -68,6 +68,55 @@ Rendered:
 Supported types include `note`, `tip`, `warning`, `danger`, `info`, and
 `success`.
 
+## Inline attributes
+
+Inline classes use swift-markdown's attribute syntax and are opt-in:
+
+```swift
+MarkdownExtensions(inlineAttributes: true)
+```
+
+```markdown
+^[New](class: "badge badge-new")
+```
+
+Kiln accepts only the JSON5 `class` property and emits an escaped `<span>`.
+
+## Block directives
+
+Registering a handler enables swift-markdown block directives. Handlers receive
+parsed arguments and HTML-rendered Markdown children. Container helpers avoid
+embedding HTML in site configuration:
+
+```swift
+let card = MarkdownDirectiveHandler("Card") { directive in
+    .container(
+        .aside,
+        bodyHTML: directive.bodyHTML,
+        classes: ["card", directive.arguments["tone"] ?? ""],
+        head: MarkdownHead(
+            metadata: [.init(value: "kiln-component", content: "card")],
+            stylesheets: [.init("/components/card.css")],
+            scripts: [.init("/components/card.js")]
+        )
+    )
+}
+
+let markdown = MarkdownExtensions(directiveHandlers: [card])
+```
+
+```markdown
+@Card(tone: warning) {
+  ## Read this first
+
+  Directive bodies use normal Markdown.
+}
+```
+
+Head resources are escaped, emitted only on pages using the directive, and
+deduplicated. Their URLs are emitted verbatim; use root-relative or absolute
+URLs. Unknown directives act as transparent containers and preserve children.
+
 ## Front matter
 
 An optional YAML block at the top of a file (the `meta` extension) overrides

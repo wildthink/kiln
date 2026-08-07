@@ -18,6 +18,8 @@ public struct RenderedMarkdown: Sendable {
     public var images: [String]
     /// Anchor ids of every heading on the page (for validating `#fragment` links).
     public var headingIDs: [String]
+    /// Metadata and external assets requested by Markdown directive handlers.
+    public var head: MarkdownHead
 }
 
 /// Renders markdown to HTML, applying Kiln's enabled extensions (admonitions,
@@ -34,26 +36,37 @@ public struct MarkdownRenderer: Sendable {
         var headings: [TOCEntry] = []
         var links: [String] = []
         var images: [String] = []
-        let html = renderBody(source, slugger: slugger, headings: &headings, links: &links, images: &images, linkResolver: linkResolver)
+        var head = MarkdownHead()
+        let html = renderBody(source, slugger: slugger, headings: &headings, links: &links, images: &images, head: &head, linkResolver: linkResolver)
         let toc = TableOfContents.build(from: headings, levels: options.tableOfContents.levels)
         let firstHeading = headings.first(where: { $0.level == 1 })?.title
         return RenderedMarkdown(
             html: html,
             tableOfContents: toc,
             firstHeading: firstHeading,
-            metaDescription: Self.metaDescription(from: source),
+            metaDescription: Self.metaDescription(from: source, parseBlockDirectives: !options.directiveHandlers.isEmpty),
             links: links,
             images: images,
-            headingIDs: headings.map(\.id)
+            headingIDs: headings.map(\.id),
+            head: head
         )
     }
 
     /// First prose paragraph as a single line of plain text, truncated to ~155
     /// characters on a word boundary (with an ellipsis) for use as a meta
     /// description. Skips headings and Kiln admonition markers.
-    static func metaDescription(from source: String, maxLength: Int = 155) -> String? {
-        for child in Document(parsing: source).children {
-            guard let paragraph = child as? Paragraph else { continue }
+    static func metaDescription(from source: String, maxLength: Int = 155, parseBlockDirectives: Bool = false) -> String? {
+        let parseOptions: ParseOptions = parseBlockDirectives ? .parseBlockDirectives : []
+        let document = Document(parsing: source, options: parseOptions)
+
+        func paragraphs(in markup: any Markup) -> [Paragraph] {
+            markup.children.flatMap { child in
+                if let paragraph = child as? Paragraph { return [paragraph] }
+                return paragraphs(in: child)
+            }
+        }
+
+        for paragraph in paragraphs(in: document) {
             let collapsed = paragraph.plainText
                 .split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" })
                 .joined(separator: " ")
@@ -70,7 +83,7 @@ public struct MarkdownRenderer: Sendable {
 
     /// Render a (possibly nested) markdown body, sharing the slugger so anchor
     /// ids stay unique across the whole page and accumulating headings in order.
-    private func renderBody(_ source: String, slugger: Slugger, headings: inout [TOCEntry], links: inout [String], images: inout [String], linkResolver: LinkResolver?) -> String {
+    private func renderBody(_ source: String, slugger: Slugger, headings: inout [TOCEntry], links: inout [String], images: inout [String], head: inout MarkdownHead, linkResolver: LinkResolver?) -> String {
         let segments: [MarkdownSegment] = options.admonitions
             ? AdmonitionParser.segments(from: source)
             : [.markdown(source)]
@@ -80,23 +93,31 @@ public struct MarkdownRenderer: Sendable {
             switch segment {
             case .markdown(let text):
                 guard !text.isBlank else { continue }
-                let document = Document(parsing: text)
-                var renderer = HTMLRenderer(slugger: slugger, tocOptions: options.tableOfContents, linkResolver: linkResolver)
+                let parseOptions: ParseOptions = options.directiveHandlers.isEmpty ? [] : .parseBlockDirectives
+                let document = Document(parsing: text, options: parseOptions)
+                var renderer = HTMLRenderer(
+                    slugger: slugger,
+                    tocOptions: options.tableOfContents,
+                    linkResolver: linkResolver,
+                    rendersInlineAttributes: options.inlineAttributes,
+                    directiveHandlers: options.directiveHandlers
+                )
                 renderer.visit(document)
                 html += renderer.result
                 headings.append(contentsOf: renderer.headings)
                 links.append(contentsOf: renderer.links)
                 images.append(contentsOf: renderer.images)
+                head.merge(renderer.head)
             case .admonition(let admonition):
-                html += renderAdmonition(admonition, slugger: slugger, headings: &headings, links: &links, images: &images, linkResolver: linkResolver)
+                html += renderAdmonition(admonition, slugger: slugger, headings: &headings, links: &links, images: &images, head: &head, linkResolver: linkResolver)
             }
         }
         return html
     }
 
-    private func renderAdmonition(_ admonition: Admonition, slugger: Slugger, headings: inout [TOCEntry], links: inout [String], images: inout [String], linkResolver: LinkResolver?) -> String {
+    private func renderAdmonition(_ admonition: Admonition, slugger: Slugger, headings: inout [TOCEntry], links: inout [String], images: inout [String], head: inout MarkdownHead, linkResolver: LinkResolver?) -> String {
         let classes = (["admonition"] + admonition.classes).joined(separator: " ")
-        let bodyHTML = renderBody(admonition.body, slugger: slugger, headings: &headings, links: &links, images: &images, linkResolver: linkResolver)
+        let bodyHTML = renderBody(admonition.body, slugger: slugger, headings: &headings, links: &links, images: &images, head: &head, linkResolver: linkResolver)
 
         // Resolve the title: an explicit empty string suppresses it; otherwise
         // use the given title or the capitalised kind.

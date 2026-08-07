@@ -89,6 +89,7 @@ struct BlogLoader {
                 authors: authors,
                 excerpt: excerpt,
                 contentHTML: rendered.html,
+                markdownHead: rendered.head,
                 readingTimeMinutes: readingTime,
                 socialImage: frontMatter.image,
                 sourceURL: file,

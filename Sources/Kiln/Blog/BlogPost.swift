@@ -45,6 +45,8 @@ public struct BlogPost: Sendable {
     public var excerpt: String
     /// The rendered HTML body.
     public var contentHTML: String
+    /// Per-page `<head>` elements requested while rendering the post.
+    public var markdownHead: MarkdownHead
     /// Estimated reading time in whole minutes (at least 1).
     public var readingTimeMinutes: Int
     /// Optional social/OpenGraph image for this post (front matter `image:`).
@@ -66,6 +68,7 @@ public struct BlogPost: Sendable {
         authors: [BlogAuthor],
         excerpt: String,
         contentHTML: String,
+        markdownHead: MarkdownHead = MarkdownHead(),
         readingTimeMinutes: Int,
         socialImage: String?,
         sourceURL: URL,
@@ -79,6 +82,7 @@ public struct BlogPost: Sendable {
         self.authors = authors
         self.excerpt = excerpt
         self.contentHTML = contentHTML
+        self.markdownHead = markdownHead
         self.readingTimeMinutes = readingTimeMinutes
         self.socialImage = socialImage
         self.sourceURL = sourceURL
