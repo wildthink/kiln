@@ -66,7 +66,17 @@ public struct MarkdownRenderer: Sendable {
             }
         }
 
-        for paragraph in paragraphs(in: document) {
+        // Descend only when block directives are parsed. The recursion exists
+        // because a directive body nests the page's first real paragraph one
+        // level down; with directives off there is nothing to descend *for*,
+        // and descending anyway would change the description of every page
+        // that opens with a list or a block quote — silently rewriting the
+        // meta and OpenGraph tags of an already-published site on upgrade.
+        let candidates = parseBlockDirectives
+            ? paragraphs(in: document)
+            : document.children.compactMap { $0 as? Paragraph }
+
+        for paragraph in candidates {
             let collapsed = paragraph.plainText
                 .split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" })
                 .joined(separator: " ")

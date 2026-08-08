@@ -35,30 +35,56 @@ public struct MarkdownDirectiveOutput: Sendable, Equatable {
     }
 
     /// Wrap rendered directive children without requiring handlers to construct
-    /// HTML. Classes are normalized and attribute-escaped by Kiln.
+    /// HTML. Classes and attributes are normalized and attribute-escaped by
+    /// Kiln.
+    ///
+    /// `attributes` covers what a class cannot: the `data-` values a component
+    /// needs its own script or stylesheet to read, and the ARIA a wrapper needs
+    /// to be announced correctly. Without it any handler wanting either has to
+    /// abandon this helper and concatenate its own HTML, which is the one thing
+    /// the helper exists to prevent.
     public static func container(
         _ element: MarkdownContainer = .div,
         bodyHTML: String,
         classes: [String] = [],
+        attributes: [String: String] = [:],
         head: MarkdownHead = MarkdownHead()
     ) -> Self {
         let normalizedClasses = classes
             .flatMap { $0.split(whereSeparator: \Character.isWhitespace).map(String.init) }
             .filter { !$0.isEmpty }
-        let classAttribute = normalizedClasses.isEmpty
-            ? ""
-            : " class=\"\(HTMLEscaping.attribute(normalizedClasses.joined(separator: " ")))\""
-        return Self(
-            html: "<\(element.rawValue)\(classAttribute)>\n\(bodyHTML)</\(element.rawValue)>\n",
-            head: head
-        )
+        var markup = "<\(element.rawValue)"
+        if !normalizedClasses.isEmpty {
+            markup += " class=\"\(HTMLEscaping.attribute(normalizedClasses.joined(separator: " ")))\""
+        }
+        // Sorted so the same inputs always produce the same markup —
+        // dictionary order is not stable, and unstable output would defeat
+        // content-hashed caching and make snapshot tests flap.
+        for name in attributes.keys.sorted() {
+            guard Self.isSafeAttributeName(name), let value = attributes[name] else { continue }
+            markup += " \(name)=\"\(HTMLEscaping.attribute(value))\""
+        }
+        markup += ">\n\(bodyHTML)</\(element.rawValue)>\n"
+        return Self(html: markup, head: head)
+    }
+
+    /// Attribute names a handler may set. Escaping a *value* is enough to keep
+    /// it inside its quotes, but a name is not inside quotes at all — so the
+    /// name is restricted by construction rather than escaped, and anything
+    /// that could open an event handler (`on…`) or a namespace is refused.
+    static func isSafeAttributeName(_ name: String) -> Bool {
+        guard !name.isEmpty, name.count <= 64, !name.lowercased().hasPrefix("on") else { return false }
+        guard let first = name.first, first.isLetter else { return false }
+        return name.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
     }
 }
 
 /// Code-defined rendering hook for one swift-markdown `BlockDirective` name.
 public struct MarkdownDirectiveHandler: Sendable {
     public var name: String
-    let renderBody: @Sendable (MarkdownDirective) -> MarkdownDirectiveOutput
+    /// Renders one occurrence of the directive. Public so a handler can be
+    /// exercised directly in a test, without standing up a whole site build.
+    public let renderBody: @Sendable (MarkdownDirective) -> MarkdownDirectiveOutput
 
     public init(
         _ name: String,

@@ -198,6 +198,60 @@ struct MarkdownTests {
         #expect(head.html.contains(#"src="/scripts/&quot;bad.js""#))
         #expect(!head.html.contains(" onload=\"bad\""))
     }
+
+    @Test("Container attributes are emitted in a stable order and escaped")
+    func containerAttributes() {
+        let output = MarkdownDirectiveOutput.container(
+            .figure,
+            bodyHTML: "<p>Body</p>\n",
+            classes: ["map"],
+            attributes: ["data-zoom": "14", "data-src": #"a" onerror="bad"#, "aria-label": "Places"]
+        )
+        // Sorted by name, so identical inputs always produce identical markup.
+        #expect(output.html.hasPrefix(
+            #"<figure class="map" aria-label="Places" data-src="a&quot; onerror=&quot;bad" data-zoom="14">"#
+        ))
+        #expect(!output.html.contains(" onerror=\"bad\""))
+        #expect(output.html.contains("<p>Body</p>"))
+    }
+
+    @Test("An attribute name that could open an event handler is refused, not escaped")
+    func containerRefusesUnsafeAttributeNames() {
+        let output = MarkdownDirectiveOutput.container(
+            bodyHTML: "",
+            attributes: ["onclick": "steal()", "on": "x", "data bad": "y", "": "z", "9lives": "w", "data-ok": "yes"]
+        )
+        #expect(output.html.contains(#"data-ok="yes""#))
+        for refused in ["onclick", "data bad", "9lives"] {
+            #expect(!output.html.contains(refused))
+        }
+    }
+
+    @Test("A handler's render closure is reachable, so a component can be tested on its own")
+    func handlerRenderIsPublic() {
+        let handler = MarkdownDirectiveHandler("Echo") { .init(html: "<p>\($0.arguments["say"] ?? "")</p>") }
+        let output = handler.renderBody(MarkdownDirective(name: "Echo", arguments: ["say": "hello"]))
+        #expect(output.html == "<p>hello</p>")
+    }
+
+    @Test("Enabling directives does not change an existing page's meta description")
+    func metaDescriptionIsStableWithoutDirectives() {
+        // A page opening with a list: its first *top-level* paragraph is the
+        // prose below, and descending into the list would wrongly pick the
+        // list item instead — rewriting the description of every such page.
+        let source = """
+        # Title
+
+        - A list item first
+
+        The real opening paragraph.
+        """
+        #expect(MarkdownRenderer.metaDescription(from: source) == "The real opening paragraph.")
+        #expect(
+            MarkdownRenderer.metaDescription(from: source, parseBlockDirectives: true)
+                == "A list item first"
+        )
+    }
 }
 
 @Suite("Slugger")
